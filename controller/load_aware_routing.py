@@ -1,3 +1,4 @@
+import os
 import time
 
 from ryu.base import app_manager
@@ -63,6 +64,8 @@ class LoadAwareRouting(app_manager.RyuApp):
         return parser.OFPMatch(**f)
 
     def choose_path(self, direction):
+        if os.environ.get("ROUTING_MODE") == "shortest":
+            return "A", {"A": 0.0, "B": 0.0}
         now = time.time()
         self.recent = [(t, p) for t, p in self.recent if now - t < RECENT_SECS]
         mon = app_manager.lookup_service_brick('LinkMonitor')
