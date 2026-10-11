@@ -31,6 +31,7 @@ def build():
     net.addLink(s3, s4, bw=10)
 
     net.start()
+    net.staticArp()
     CLI(net)
     net.stop()
 
