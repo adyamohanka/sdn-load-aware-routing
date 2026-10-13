@@ -27,7 +27,7 @@ Two equal-length paths from h1 to h2: path A (via s2) and path B (via s3). Every
 
 ## Results
 
-![Throughput comparison](results/throughput.png)
+![Throughput comparison](results/throughput_comparison.png)
 
 Two simultaneous TCP flows h1 to h2 (`iperf -P 2`, 30 s), 3 runs per mode:
 

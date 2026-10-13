@@ -28,5 +28,5 @@ ax.set_ylim(0, 23)
 for s in ["top", "right"]:
     ax.spines[s].set_visible(False)
 plt.tight_layout()
-plt.savefig("results/throughput.png", dpi=150)
+plt.savefig("results/throughput_comparison.png", dpi=150)
 print("saved")
