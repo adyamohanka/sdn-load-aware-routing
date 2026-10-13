@@ -1,3 +1,5 @@
+import json
+import os
 from ryu.base import app_manager
 from ryu.controller import ofp_event
 from ryu.controller.handler import MAIN_DISPATCHER, DEAD_DISPATCHER, set_ev_cls
@@ -5,6 +7,7 @@ from ryu.lib import hub
 from ryu.ofproto import ofproto_v1_3
 
 INTERVAL = 2  # seconds between measurements
+STATS_FILE = '/tmp/link_load.json'
 
 # (switch id, port number) -> link name, taken from our topology
 LINKS = {
@@ -44,6 +47,7 @@ class LinkMonitor(app_manager.RyuApp):
                 line = " | ".join(f"{name} {mbps:5.2f}"
                                   for name, mbps in sorted(self.link_load.items()))
                 self.logger.info("Mbps: %s", line)
+                self._write_stats()
 
     @set_ev_cls(ofp_event.EventOFPPortStatsReply, MAIN_DISPATCHER)
     def port_stats_reply_handler(self, ev):
@@ -57,3 +61,10 @@ class LinkMonitor(app_manager.RyuApp):
             if prev is None:
                 continue
             self.link_load[LINKS[key]] = (stat.tx_bytes - prev) * 8 / INTERVAL / 1e6
+
+    def _write_stats(self):
+        # write to a temp file then rename, so readers never see half a file
+        tmp = STATS_FILE + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(self.link_load, f)
+        os.replace(tmp, STATS_FILE)
