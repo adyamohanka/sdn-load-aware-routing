@@ -18,3 +18,14 @@ Single flow (ICMP ping every 0.1 s, 300 pings over 30 s). Link s1-s2 taken down 
 
 Controller log showed PORT DOWN followed immediately by REROUTE path A -> B.
 One run so far.
+
+## Repeated runs: two simultaneous TCP flows (iperf -P 2, 30 s, 3 runs per mode)
+
+| Routing | Run 1 | Run 2 | Run 3 | Average |
+|---|---|---|---|---|
+| Baseline (fixed shortest path) | 8.90 | 8.86 | 9.51 | 9.09 Mbits/s |
+| Load-aware | 18.9 | 18.2 | 18.1 | 18.4 Mbits/s |
+
+Load-aware routing gave about 2.0x the throughput of the baseline (+102%).
+Baseline sends both flows over one 10 Mbps path. Load-aware places them on separate paths.
+Emulated in Mininet; both candidate paths have equal length, so the baseline always picks path A.
