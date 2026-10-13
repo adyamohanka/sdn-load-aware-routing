@@ -25,9 +25,16 @@ PATHS = {
     },
 }
 
+# Switch ports that belong to each path (host-facing ports are shared, so left out).
+PATH_PORTS = {
+    "A": {(1, 2), (2, 1), (2, 2), (4, 2)},
+    "B": {(1, 3), (3, 1), (3, 2), (4, 3)},
+}
+
 RECENT_SECS = 4        # the monitor needs a moment to notice a new flow
 RECENT_PENALTY = 5.0   # so each recent placement counts as ~5 Mbps
 IDLE_TIMEOUT = 10      # a rule disappears after 10 s without traffic
+BASELINE = os.environ.get("ROUTING_MODE") == "shortest"
 
 
 class LoadAwareRouting(app_manager.RyuApp):
@@ -36,8 +43,9 @@ class LoadAwareRouting(app_manager.RyuApp):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.datapaths = {}
-        self.flow_path = {}   # flow -> "A" or "B"
-        self.recent = []      # (time, path) of recent placements
+        self.flow_path = {}    # flow -> "A" or "B"
+        self.recent = []       # (time, path) of recent placements
+        self.down_ports = set()
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switch_features_handler(self, ev):
@@ -63,20 +71,25 @@ class LoadAwareRouting(app_manager.RyuApp):
             f.update(udp_src=sport, udp_dst=dport)
         return parser.OFPMatch(**f)
 
+    def path_is_down(self, name):
+        return any(p in self.down_ports for p in PATH_PORTS[name])
+
     def choose_path(self, direction):
-        if os.environ.get("ROUTING_MODE") == "shortest":
+        if BASELINE:
             return "A", {"A": 0.0, "B": 0.0}
         now = time.time()
         self.recent = [(t, p) for t, p in self.recent if now - t < RECENT_SECS]
         mon = app_manager.lookup_service_brick('LinkMonitor')
-        if mon is None:
-            self.logger.warning("LinkMonitor not found, using placement counts only")
         load = mon.link_load if mon else {}
         scores = {}
         for name, info in PATHS.items():
+            if self.path_is_down(name):
+                continue  # never pick a broken path
             measured = max(load.get(l, 0.0) for l in info[direction + "_links"])
             placed = sum(1 for _, p in self.recent if p == name)
             scores[name] = measured + RECENT_PENALTY * placed
+        if not scores:
+            return "A", {}
         best = min(scores, key=scores.get)
         self.recent.append((now, best))
         return best, scores
@@ -91,6 +104,39 @@ class LoadAwareRouting(app_manager.RyuApp):
             match = self.make_match(parser, flow)
             actions = [parser.OFPActionOutput(out_port)]
             self.add_flow(dp, 10, match, actions, IDLE_TIMEOUT)
+
+    @set_ev_cls(ofp_event.EventOFPPortStatus, MAIN_DISPATCHER)
+    def port_status_handler(self, ev):
+        msg = ev.msg
+        dp = msg.datapath
+        ofp = dp.ofproto
+        key = (dp.id, msg.desc.port_no)
+        is_down = bool(msg.desc.state & ofp.OFPPS_LINK_DOWN) or msg.reason == ofp.OFPPR_DELETE
+        was_down = key in self.down_ports
+        if is_down:
+            self.down_ports.add(key)
+        else:
+            self.down_ports.discard(key)
+        if is_down == was_down:
+            return
+        self.logger.info("PORT s%s port %s is now %s", dp.id, key[1],
+                         "DOWN" if is_down else "UP")
+        if is_down and not BASELINE:
+            self.reroute_flows()
+
+    def reroute_flows(self):
+        for flow, path in list(self.flow_path.items()):
+            if not self.path_is_down(path):
+                continue
+            other = "B" if path == "A" else "A"
+            if self.path_is_down(other):
+                self.logger.warning("both paths are down, cannot reroute %s", flow)
+                continue
+            direction = "fwd" if flow[0] == H1 else "rev"
+            self.flow_path[flow] = other
+            self.install_path(flow, direction, other)
+            self.logger.info("REROUTE %s:%s -> %s:%s moved path %s -> %s",
+                             flow[0], flow[3], flow[1], flow[4], path, other)
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def packet_in_handler(self, ev):
@@ -117,9 +163,8 @@ class LoadAwareRouting(app_manager.RyuApp):
         flow = (ip.src, ip.dst, ip.proto, sport, dport)
         reverse = (ip.dst, ip.src, ip.proto, dport, sport)
 
-        if flow in self.flow_path:
-            path = self.flow_path[flow]
-        else:
+        path = self.flow_path.get(flow)
+        if path is None or (not BASELINE and self.path_is_down(path)):
             path, scores = self.choose_path(direction)
             self.flow_path[flow] = path
             self.flow_path[reverse] = path
