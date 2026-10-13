@@ -7,12 +7,14 @@ A Ryu (OpenFlow 1.3) controller that picks the less congested of two paths for e
 Traditional shortest-path routing sends every flow down the same path even when another equal path sits idle. An SDN controller sees the whole network, so it can measure link load and place flows more intelligently, and react to failures immediately.
 
 ## Topology
- s2
-      /    \
 
-h1 - s1 s4 - h2
-\ /
-s3
+```
+            s2
+          /    \
+h1 - s1            s4 - h2
+          \    /
+            s3
+```
 
 Two equal-length paths from h1 to h2: path A (via s2) and path B (via s3). Every inter-switch link is capped at 10 Mbps.
 
@@ -41,25 +43,38 @@ More detail in [results/results.md](results/results.md).
 ## Run it
 
 Needs Linux (Ubuntu), Mininet, Open vSwitch and iperf:
+
+```
 sudo apt install -y mininet openvswitch-switch iperf git python3-pip
+```
+
 Ryu needs an older Python. One working setup:
+
+```
 curl -LsSf https://astral.sh/uv/install.sh | sh
 uv venv --seed --python 3.9 ~/ryu-env
 source ~/ryu-env/bin/activate
-pip install “setuptools==65.5.0” wheel pbr eventlet==0.30.2
+pip install "setuptools==65.5.0" wheel pbr eventlet==0.30.2
 pip install ryu --no-build-isolation
+```
 
 Terminal 1, start the controller:
+
+```
 ryu-manager controller/link_monitor.py controller/load_aware_routing.py
+```
 
 Use `ROUTING_MODE=shortest ryu-manager ...` for the baseline.
 
 Terminal 2, start the network:
+
+```
 sudo python3 topo.py
 mininet> h1 ping -c 2 h2
 mininet> h2 iperf -s &
 mininet> h1 iperf -c h2 -t 30 -P 2
 mininet> link s1 s2 down
+```
 
 ## Limitations
 
