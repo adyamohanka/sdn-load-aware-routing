@@ -102,3 +102,11 @@ Run it:
 
     ryu-manager controller/link_monitor.py controller/load_aware_routing.py
     python3 dashboard/app.py        # then open http://<vm-ip>:5000
+
+Both paths carrying traffic (load-aware split):
+
+![Dashboard, balanced](results/dash_balanced.png)
+
+After `link s2 s4 down`: Path A drops to 0 and traffic moves to Path B:
+
+![Dashboard, failover](results/dash_failover.png)
