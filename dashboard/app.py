@@ -18,17 +18,28 @@ PAGE = """
 <h2>Live link load (Mbps)</h2>
 <div id="links">waiting for data...</div>
 <script>
+const GROUPS = {
+  "Path A (via s2)": ["s1->s2", "s2->s4"],
+  "Path B (via s3)": ["s1->s3", "s3->s4"]
+};
+function color(pct) {
+  return pct > 80 ? '#e5484d' : pct > 40 ? '#f5a524' : '#2fb344';
+}
 async function refresh() {
   const r = await fetch('/api/links');
   const d = await r.json();
   let html = '';
-  for (const [name, v] of Object.entries(d.links).sort()) {
-    const pct = Math.min(100, v / d.capacity * 100);
-    html += `<div class="row">${name}: ${v.toFixed(2)}
-      <div class="bar"><div class="fill ${pct > 80 ? 'hot' : ''}"
-      style="width:${pct}%"></div></div></div>`;
+  for (const [title, names] of Object.entries(GROUPS)) {
+    html += `<h3>${title}</h3>`;
+    for (const n of names) {
+      const v = d.links[n] || 0;
+      const pct = Math.min(100, v / d.capacity * 100);
+      html += `<div class="row">${n}: ${v.toFixed(2)} Mbps
+        <div class="bar"><div class="fill"
+        style="width:${pct}%;background:${color(pct)}"></div></div></div>`;
+    }
   }
-  document.getElementById('links').innerHTML = html || 'no data yet';
+  document.getElementById('links').innerHTML = html;
 }
 setInterval(refresh, 1000);
 refresh();

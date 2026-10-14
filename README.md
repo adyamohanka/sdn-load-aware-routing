@@ -93,3 +93,12 @@ mininet> link s1 s2 down
 - `controller/load_aware_routing.py`: routing and failure handling
 - `controller/learning_switch.py`: first learning-switch controller (reference)
 - `results/results.md`: raw results
+
+## Live dashboard
+
+A small Flask app (`dashboard/app.py`) serves the controller's measured link loads at `/api/links` and shows them live on a web page, grouped by path. Bars turn green, amber or red by utilisation, and the failover is visible when a link goes down.
+
+Run it:
+
+    ryu-manager controller/link_monitor.py controller/load_aware_routing.py
+    python3 dashboard/app.py        # then open http://<vm-ip>:5000
